@@ -2,7 +2,8 @@ name: sync-upstream
 
 # 1. Подтягивает master из Gml-Launcher/Gml.Web.Api.
 # 2. Обновляет сабмодуль src/gml-core до свежего master форка Gml.Core.
-# 3. Пушит в форк — дальнейшую сборку образа делает docker-package-publish.yml.
+# 3. Создаёт у себя теги новых релизов upstream (v*) на смерженном master.
+# 4. Пушит master и теги — сборку образов (:master, :<tag>, :latest) делает docker-package-publish.yml.
 on:
   schedule:
     - cron: '43 3 * * *'
@@ -33,13 +34,14 @@ jobs:
           git config user.email "gml-sync-bot@users.noreply.github.com"
           token="${SYNC_TOKEN:-$GITHUB_TOKEN}"
           git remote set-url origin "https://x-access-token:${token}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote add upstream https://github.com/Gml-Launcher/Gml.Web.Api.git
+          git fetch --tags origin
 
       - name: Init submodules
         run: git submodule update --init --recursive
 
       - name: Merge upstream master
         run: |
-          git remote add upstream https://github.com/Gml-Launcher/Gml.Web.Api.git
           git fetch upstream master
           git merge --no-edit upstream/master
 
@@ -51,15 +53,55 @@ jobs:
             git commit -m "chore: update Gml.Core submodule"
           fi
 
-      - name: Push to fork
+      - name: Push master
         run: git push origin HEAD:master
 
-      - name: Create issue on conflict
+      - name: Mirror new upstream release tags
+        run: |
+          set -euo pipefail
+
+          mapfile -t upstream_tags < <(git ls-remote --tags --refs upstream 'refs/tags/v*' \
+            | sed 's#.*refs/tags/##' | sort -rV)
+
+          if [ ${#upstream_tags[@]} -eq 0 ]; then
+            echo "У upstream нет тегов v*"
+            exit 0
+          fi
+
+          local_max=$(git tag --list 'v*' | sort -rV | head -n1 || true)
+          new_tags=()
+
+          if [ -z "$local_max" ]; then
+            # Первый запуск в форке: не заливаем всю историю тегов, берём только свежий.
+            new_tags=("${upstream_tags[0]}")
+          else
+            # Всё, что новее самого свежего локального тега, и ещё не существует локально.
+            for tag in "${upstream_tags[@]}"; do
+              if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+                break
+              fi
+              new_tags+=("${tag}")
+            done
+          fi
+
+          if [ ${#new_tags[@]} -eq 0 ]; then
+            echo "Новых релизных тегов нет"
+            exit 0
+          fi
+
+          for tag in "${new_tags[@]}"; do
+            echo "Создаю тег ${tag} на $(git rev-parse --short HEAD)"
+            git tag -a "${tag}" -m "Gml.Web.Api ${tag} (fork: S3/R2 patch)"
+          done
+
+          git push origin "${new_tags[@]}"
+
+      - name: Create issue on failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
-          body=$(printf 'Автомерж upstream/master не прошёл. Разреши вручную:\n\n    git fetch upstream\n    git merge upstream/master\n\nСкорее всего конфликт в csproj/Dockerfile — там наши правки (ProjectReference на src/gml-core).\n')
+          body=$(printf 'Шаг синхронизации упал. Частые причины:\n\n    1) конфликт мержа upstream/master\n    2) SYNC_TOKEN без scope workflow или истёк\n    3) тег с таким именем уже существует на origin\n')
           gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Конфликт синхронизации с upstream ($(date -u +%F))" \
+            --title "Синхронизация с upstream упала ($(date -u +%F))" \
             --body "$body" || true
