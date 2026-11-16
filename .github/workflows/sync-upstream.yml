@@ -1,0 +1,73 @@
+name: sync-upstream
+
+# 1. Подтягивает master из Gml-Launcher/Gml.Web.Api.
+# 2. Обновляет сабмодуль src/gml-core до свежего master форка Gml.Core.
+# 3. Пушит в форк — дальнейшую сборку образа делает docker-package-publish.yml.
+on:
+  schedule:
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          git config user.name  "gml-sync-bot"
+          git config user.email "gml-sync-bot@users.noreply.github.com"
+          # PAT нужен, чтобы push запускал docker-package-publish.yml (события от GITHUB_TOKEN его не триггерят).
+          token="${SYNC_TOKEN:-$GITHUB_TOKEN}"
+          git remote set-url origin "https://x-access-token:${token}@github.com/${GITHUB_REPOSITORY}.git"
+
+      - name: Init submodules
+        run: git submodule update --init --recursive
+
+      - name: Merge upstream master
+        run: |
+          git remote add upstream https://github.com/Gml-Launcher/Gml.Web.Api.git
+          git fetch upstream master
+          git merge --no-edit upstream/master
+
+      - name: Bump Gml.Core submodule
+        run: |
+          git submodule update --remote --merge src/gml-core
+          if ! git diff --quiet -- src/gml-core; then
+            git add src/gml-core
+            git commit -m "chore: update Gml.Core submodule"
+          fi
+
+      - name: Push to fork
+        run: git push origin HEAD:master
+
+      - name: Create issue on conflict
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Конфликт синхронизации с upstream ($(date -u +%F))" \
+            --body "Автомерж upstream/master не прошёл. Разреши вручную:
+
+\`\`\`
+git fetch upstream
+git merge upstream/master
+\`\`\`
+
+Скорее всего конфликт в csproj/Dockerfile — там наши правки (ProjectReference на src/gml-core)." || true

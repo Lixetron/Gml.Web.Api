@@ -21,6 +21,11 @@ public class SettingsRepository(
     {
         var oldSettings = await databaseContext.Settings.OrderByDescending(c => c.Id).FirstOrDefaultAsync();
 
+        // Дашборд не получает сохранённый пароль и всегда отправляет пустую строку —
+        // если поле не заполнили заново, оставляем прежний Secret Key (иначе S3-доступ ломается).
+        if (string.IsNullOrEmpty(settings.StoragePassword) && !string.IsNullOrEmpty(oldSettings?.StoragePassword))
+            settings.StoragePassword = oldSettings!.StoragePassword;
+
         gmlManager.LauncherInfo.UpdateSettings(
             settings.StorageType,
             settings.StorageHost,

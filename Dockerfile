@@ -11,6 +11,11 @@ ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["src/Gml.Web.Api/Gml.Web.Api.csproj", "src/Gml.Web.Api/"]
 COPY ["src/plugins/Gml.Web.Api.EndpointSDK/Gml.Web.Api.EndpointSDK.csproj", "src/plugins/Gml.Web.Api.EndpointSDK/"]
+COPY ["src/gml-core/src/Gml.Core/Gml.Core.csproj", "src/gml-core/src/Gml.Core/"]
+COPY ["src/gml-core/src/Gml.Common/Gml.Common/Gml.Common.csproj", "src/gml-core/src/Gml.Common/Gml.Common/"]
+COPY ["src/gml-core/src/Gml.Dto/Gml.Dto.csproj", "src/gml-core/src/Gml.Dto/"]
+COPY ["src/gml-core/src/Gml.Domains/Gml.Domains.csproj", "src/gml-core/src/Gml.Domains/"]
+COPY ["src/gml-core/src/Gml.Interfaces/Gml.Interfaces.csproj", "src/gml-core/src/Gml.Interfaces/"]
 RUN dotnet restore "src/Gml.Web.Api/Gml.Web.Api.csproj"
 COPY . .
 WORKDIR "/src/src/Gml.Web.Api"

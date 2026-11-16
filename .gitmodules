@@ -1,0 +1,4 @@
+[submodule "src/gml-core"]
+	path = src/gml-core
+	url = https://github.com/Lixetron/Gml.Core.git
+	branch = master

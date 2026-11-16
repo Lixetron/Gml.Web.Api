@@ -8,6 +8,7 @@ using Gml.Web.Api.Core.Authorization;
 using Gml.Web.Api.Core.Hubs;
 using Gml.Web.Api.Core.Hubs.Controllers;
 using Gml.Web.Api.Core.Integrations.Auth;
+using Gml.Web.Api.Core.Json;
 using Gml.Web.Api.Core.Middlewares;
 using Gml.Web.Api.Core.Options;
 using Gml.Web.Api.Core.Services;
@@ -64,6 +65,12 @@ public static class ApplicationExtensions
         builder.RegisterEndpointsInfo(serverSettings.ProjectName, serverSettings.ProjectDescription);
         builder.RegisterSystemComponents(serverSettings);
         builder.Services.ConfigureOptions<ProfileHub.ConfigureJsonOptions>();
+
+        // Пустая строка в sentryAutoClearPeriod от дашборда не должна ронять сохранение настроек в 400.
+        builder.Services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.Converters.Add(new LenientTimeSpanConverter());
+        });
 
         return builder;
     }
