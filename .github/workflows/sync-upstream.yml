@@ -31,7 +31,6 @@ jobs:
         run: |
           git config user.name  "gml-sync-bot"
           git config user.email "gml-sync-bot@users.noreply.github.com"
-          # PAT нужен, чтобы push запускал docker-package-publish.yml (события от GITHUB_TOKEN его не триггерят).
           token="${SYNC_TOKEN:-$GITHUB_TOKEN}"
           git remote set-url origin "https://x-access-token:${token}@github.com/${GITHUB_REPOSITORY}.git"
 
@@ -60,14 +59,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
-          gh issue create \
-            --repo "${{ github.repository }}" \
+          body=$(printf 'Автомерж upstream/master не прошёл. Разреши вручную:\n\n    git fetch upstream\n    git merge upstream/master\n\nСкорее всего конфликт в csproj/Dockerfile — там наши правки (ProjectReference на src/gml-core).\n')
+          gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Конфликт синхронизации с upstream ($(date -u +%F))" \
-            --body "Автомерж upstream/master не прошёл. Разреши вручную:
-
-\`\`\`
-git fetch upstream
-git merge upstream/master
-\`\`\`
-
-Скорее всего конфликт в csproj/Dockerfile — там наши правки (ProjectReference на src/gml-core)." || true
+            --body "$body" || true
